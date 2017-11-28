@@ -1,0 +1,5 @@
+DB_NAME = 'db/wsl_emb.db'
+VECTOR_TABLE_NAME = 'emb'
+FREQ_TABLE_NAME = 'freq'
+# FIXED
+LEMMA_COUNT = 248796
