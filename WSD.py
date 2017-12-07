@@ -15,7 +15,15 @@ import inspect
 import json
 import pickle
 
+# for BabelNet and Bebelfy
+import urllib
+import json
+import gzip
+
+from io import BytesIO
+
 from LexicalNet import LexicalNet, LexicalFeature
+from configs import *
 
 # ログ
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-7s %(message)s')
@@ -177,7 +185,17 @@ class WSD:
                     continue
         logger.info('DONE')
 
-    def lesk_process(self, sentences, update=True):
+    def register(self, synset, w):
+        word = wn.morphy(w)
+        if word not in wn.synset(synset).lemma_names():
+            _, word = max((difflib.SequenceMatcher(None, word, l).ratio(), l) for l in wn.synset(synset).lemma_names())
+
+        lemma = synset+':'+word
+        if lemma not in self._freqs.keys():
+            self._freqs[lemma] = 0
+        self._freqs[lemma] += 1
+
+    def lesk_process(self, sentences, update=False):
         logger.info('PROCESSING...')
         logger.info('TOTAL SENTENCES: %i', len(sentences))
         for idx, sentence in enumerate(sentences):
@@ -193,19 +211,70 @@ class WSD:
                     p = self.to_wordnet_pos(wp[1]) # pos
                     if update:
                         synset = self._lesk(sentence, w, pos=p).name()
+                        self.register(synset, w)
                     else:
-                        synset = self.lesk(sentence, w, pos=p).name()
-                    word = wn.morphy(w)
-                    if word not in wn.synset(synset).lemma_names():
-                        _, word = max((difflib.SequenceMatcher(None, word, l).ratio(), l) for l in wn.synset(synset).lemma_names())
-
-                    lemma = synset+':'+word
-                    if lemma not in self._freqs.keys():
-                        self._freqs[lemma] = 0
-                    self._freqs[lemma] += 1
+                        self.babelfy(sentence)
                 except:
                     continue
         logger.info('DONE')
+
+    # http://babelfy.org/javadoc/it/uniroma1/lcl/jlt/util/Language.html
+    def babelfy(self, text, lang='EN'):
+        service_url = 'https://babelfy.io/v1/disambiguate'
+        params = {
+        	'text' : text,
+        	'lang' : lang,
+        	'key'  : BABEL_KEY
+        }
+
+        data = self.get(service_url, params)
+
+        # retrieving data
+        for result in data:
+            # retrieving char fragment
+            charFragment = result.get('charFragment')
+            cfStart = charFragment.get('start')
+            cfEnd = charFragment.get('end')
+            w = text[cfStart:(cfEnd+1)]
+
+            # retrieving BabelSynset ID
+            synsetId = result.get('babelSynsetID')
+            synset = self.bbl2wn(synsetId).name()
+
+            self.register(synset, w)
+
+
+    def bbl2wn(self, babelSynsetID):
+        service_url = 'https://babelnet.io/v4/getSynset'
+        params = {
+        	'id' : babelSynsetID,
+        	'key'  : BABEL_KEY
+        }
+
+        data = self.get(service_url, params)
+        wnOffsets = data['wnOffsets']
+        if len(wnOffsets)!= 0:
+            wnOffsets = data['wnOffsets'][0]['mapping']['WN_30'][0]
+            sense = wn.of2ss(wnOffsets)
+        else:
+            sense = None
+
+        return sense
+
+    def get(self, service_url, params):
+        url = service_url + '?' + urllib.parse.urlencode(params)
+        request = urllib.request.Request(url)
+        request.add_header('Accept-encoding', 'gzip')
+        response = urllib.request.urlopen(request)
+
+        if response.info().get('Content-Encoding') == 'gzip':
+        	buf = BytesIO(response.read())
+        	f = gzip.GzipFile(fileobj=buf)
+        	data = json.loads(f.read())
+        else:
+            data=None
+
+        return data
 
     def formatter(self, text):
         text = re.sub(r"[^A-Za-z0-9^,.\/']", " ", text)
@@ -271,4 +340,9 @@ if __name__=='__main__':
 
     wsd = WSD()
     # wsd.establich_signature()
-    wsd._main(input_file_name, output_file_name)
+    wsd.main(input_file_name, output_file_name)
+
+    # text = 'BabelNet is both a multilingual encyclopedic dictionary and a semantic network'
+    # wsd.babelfy(text)
+    # text = 'バベルネット は 多言語 辞書 で あり 意味 ネットワーク でも あり ます 。'
+    # wsd.babelfy(text, lang='JA')
