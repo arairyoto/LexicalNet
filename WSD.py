@@ -199,21 +199,25 @@ class WSD:
         logger.info('PROCESSING...')
         logger.info('TOTAL SENTENCES: %i', len(sentences))
         for idx, sentence in enumerate(sentences):
-            if idx%1000==0:
+            if idx%10==0:
                 logger.info('PROGRESS: %i SENTENCES DONE', idx)
-            sentence = re.split(r' +', sentence.strip())
-            sentence = [w for w in sentence if not w in self.stops]
-            tagged_sentence = nltk.pos_tag(sentence)
 
-            for wp in tagged_sentence:
-                try:
-                    w = wp[0] # word
-                    p = self.to_wordnet_pos(wp[1]) # pos
-                    if update:
+            if update:
+                sentence = re.split(r' +', sentence.strip())
+                sentence = [w for w in sentence if not w in self.stops]
+                tagged_sentence = nltk.pos_tag(sentence)
+
+                for wp in tagged_sentence:
+                    try:
+                        w = wp[0] # word
+                        p = self.to_wordnet_pos(wp[1]) # pos
                         synset = self._lesk(sentence, w, pos=p).name()
                         self.register(synset, w)
-                    else:
-                        self.babelfy(sentence)
+                    except:
+                        continue
+            else:
+                try:
+                    self.babelfy(sentence)
                 except:
                     continue
         logger.info('DONE')
@@ -242,6 +246,7 @@ class WSD:
             synset = self.bbl2wn(synsetId).name()
 
             self.register(synset, w)
+            print(synset, w)
 
 
     def bbl2wn(self, babelSynsetID):
@@ -335,8 +340,8 @@ class WSD:
 
 
 if __name__=='__main__':
-    input_file_name = 'wsd_input/choco_review_back.txt'
-    output_file_name = 'wsd_output/freq_choco_uprototype.txt'
+    input_file_name = 'wsd_input/wonderland.txt'
+    output_file_name = 'wsd_output/wonderland_babelfy.txt'
 
     wsd = WSD()
     # wsd.establich_signature()
