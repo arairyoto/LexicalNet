@@ -340,8 +340,8 @@ class WSD:
 
 
 if __name__=='__main__':
-    input_file_name = 'wsd_input/wonderland.txt'
-    output_file_name = 'wsd_output/wonderland_babelfy.txt'
+    input_file_name = 'wsd_input/choco_review_back.txt'
+    output_file_name = 'wsd_output/choco_review_babelfy.txt'
 
     wsd = WSD()
     # wsd.establich_signature()
