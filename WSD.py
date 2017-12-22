@@ -186,7 +186,11 @@ class WSD:
         logger.info('DONE')
 
     def register(self, synset, w):
-        word = wn.morphy(w)
+        w = '_'.join(w.split(' '))
+        if wn.morphy(w) == None:
+            word = w
+        else:
+            word = wn.morphy(w)
         if word not in wn.synset(synset).lemma_names():
             _, word = max((difflib.SequenceMatcher(None, word, l).ratio(), l) for l in wn.synset(synset).lemma_names())
 
@@ -225,6 +229,7 @@ class WSD:
     # http://babelfy.org/javadoc/it/uniroma1/lcl/jlt/util/Language.html
     def babelfy(self, text, lang='EN'):
         service_url = 'https://babelfy.io/v1/disambiguate'
+
         params = {
         	'text' : text,
         	'lang' : lang,
@@ -243,10 +248,12 @@ class WSD:
 
             # retrieving BabelSynset ID
             synsetId = result.get('babelSynsetID')
-            synset = self.bbl2wn(synsetId).name()
-
-            self.register(synset, w)
-            print(synset, w)
+            synset = self.bbl2wn(synsetId)
+            try:
+                synset_name = synset.name()
+                self.register(synset_name, w)
+            except:
+                continue
 
 
     def bbl2wn(self, babelSynsetID):
@@ -341,7 +348,7 @@ class WSD:
 
 if __name__=='__main__':
     input_file_name = 'wsd_input/choco_review_back.txt'
-    output_file_name = 'wsd_output/choco_review_babelfy.txt'
+    output_file_name = 'wsd_output/choco_review_babelfy_.txt'
 
     wsd = WSD()
     # wsd.establich_signature()
