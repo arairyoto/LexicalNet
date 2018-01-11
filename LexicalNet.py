@@ -67,7 +67,8 @@ class LexicalNet:
                 vector = np.zeros(300)
                 for synset in wn.synsets(name):
                     lemma = synset.name()+':'+name
-                    vector += self.get_freq(lemma, 'lemma', lang, categ)*self.get_vector(synset.name(), 'synset', lang, categ)
+                    vector += self.get_freq(lemma, 'lemma', lang, categ)*self.get_vector(lemma, 'lemma', lang, categ)
+                    # vector += self.get_freq(lemma, 'lemma', lang, categ)*self.get_vector(synset.name(), 'synset', lang, categ)
         else:
             vector = np.zeros(300)
 
@@ -87,12 +88,12 @@ class LexicalNet:
             res.append(WSLObject(self, s.name(), 'snyset'))
         return res
 
-    def all_words(self, lang='eng'):
+    def all_words(self, lang='eng', categ=None):
         res = []
         sql = 'select name from '+self.v_table+' where attr="word" and lang="'+lang+'"'
         for w in self.c.execute(sql).fetchall():
             w_name = w[0]
-            res.append(WSLObject(self, w_name, 'word', lang=lang))
+            res.append(WSLObject(self, w_name, 'word', lang=lang, categ=categ))
         return res
 
     def words(self, synset_name, lang='eng'):
@@ -110,36 +111,37 @@ class LexicalNet:
             res.append(WSLObject(l_name, 'lemma', lang=lang))
         return res
 
-    def WSLObj(self, name, attr, lang):
-        return WSLObject(self, name, attr, lang=lang)
+    def WSLObj(self, name, attr, lang, categ = None):
+        return WSLObject(self, name, attr, lang=lang, categ=categ)
 
-    def to_WSLObj(self, wn_obj):
+    def to_WSLObj(self, wn_obj, categ = None):
         obj_name = wn_obj.__class__.__name__
         if obj_name == 'Synset':
-            res = WSLObject(self, wn_obj.name(), 'synset')
+            res = WSLObject(self, wn_obj.name(), 'synset', categ=categ)
         elif obj_name == 'Lemma':
             name = wn_obj.synset().name()+':'+wn_obj.name()
             lang = wn_obj.lang()
-            res = WSLObject(self, name, 'lemma', lang=lang)
+            res = WSLObject(self, name, 'lemma', lang=lang, categ=categ)
         elif obj_name == 'str':
-            res = WSLObject(self, wn_obj, 'word', lang='eng')
+            res = WSLObject(self, wn_obj, 'word', lang='eng', categ=categ)
         else:
             res = None
         return res
 
 # Object or word ,synset, lemma
 class WSLObject:
-    def __init__(self, ln, name, attr, lang = 'None'):
+    def __init__(self, ln, name, attr, lang = 'None', categ = None):
         self.name = name
         self.attr = attr
         self.lang = lang
+        self.categ = categ
         self.ln = ln
 
-    def vector(self, categ=None):
-        return self.ln.get_vector(self.name, self.attr, self.lang, categ)
+    def vector(self):
+        return self.ln.get_vector(self.name, self.attr, self.lang, self.categ)
 
-    def freq(self, categ=None):
-        return self.ln.get_freq(self.name, self.attr, self.lang, categ)
+    def freq(self):
+        return self.ln.get_freq(self.name, self.attr, self.lang, self.categ)
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
@@ -164,16 +166,13 @@ class WSLObject:
         return res
 
 class LexicalFeature:
-    def normalized_vector(self, o, categ=None):
-        if categ == None:
-            vec = o.vector()
-        else:
-            vec = o.vector(categ=categ)
+    def normalized_vector(self, o):
+        vec = o.vector()
         return vec/np.sqrt(sum(vec*vec))
 
-    def relatedness(self, o_in, o_out, categ=None):
-        vec_in = self.normalized_vector(o_in, categ)
-        vec_out = self.normalized_vector(o_out, categ)
+    def relatedness(self, o_in, o_out):
+        vec_in = self.normalized_vector(o_in)
+        vec_out = self.normalized_vector(o_out)
         return sum(vec_in*vec_out)
 
     def topic_relatedness(self, tw, o, domain=False):
@@ -198,9 +197,12 @@ class LexicalFeature:
             freqs[l.tWnObj().synset().name()] = l.freq()
         # normalize
         for l in freqs.keys():
-            freqs[k] /= sum(freqs.values())
+            freqs[l] /= sum(freqs.values())
+        v = np.var(freqs.values())
+        n = len(freqs)
+        ambiguity = (1-1/n)/np.sqrt(v)
         # TODO
-        return np.var(freqs.values()), freqs
+        return ambiguity, freqs
 
     def commonality(self, w_in, w_out):
         S_in = set([s for s in wn.synsets(w_in.name, lang=w_in.lang)])
@@ -225,7 +227,11 @@ class LexicalFeature:
         return min(spds)
 
     def associativeness(self, w_in, w_out):
-        return None
+        k = 10 #under consideration
+        sp = self.shortest_path(w_in, w_out)
+        rel = self.relatedness(w_in, w_out)
+        ass = rel*np.log((1+sp)/k)
+        return ass, rel, sp
 
 if __name__=='__main__':
     ln = LexicalNet()
